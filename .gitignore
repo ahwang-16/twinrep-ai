@@ -1,0 +1,34 @@
+# Local LLM Engine & Model Weights (too large for Git / nested repo)
+llama.cpp/
+models/
+*.gguf
+*.bin
+*.safetensors
+
+# Environment & Secrets
+.env
+backend/.env
+*.key
+*.pem
+
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Generated Runtime Vector Index Artifacts (auto-rebuilt on startup)
+data/faiss_index/*
+!data/faiss_index/.gitkeep
+
+# macOS & Editor Trash Files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.vscode/
+.idea/
+*.swp
