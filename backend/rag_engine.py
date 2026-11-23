@@ -5,6 +5,7 @@ from pypdf import PdfReader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
+from s3_sync import S3StorageManager
 
 INDEX_DIR = Path("../data/faiss_index")
 MANUALS_DIR = Path("../data/manuals")
@@ -15,6 +16,7 @@ class TwinRepRAG:
     def __init__(self, max_l2_distance: float = 1.35):
         INDEX_DIR.mkdir(parents=True, exist_ok=True)
         MANUALS_DIR.mkdir(parents=True, exist_ok=True)
+        self.s3 = S3StorageManager()
         self.max_l2_distance = max_l2_distance
         self.embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
         self.splitter = RecursiveCharacterTextSplitter(
@@ -22,10 +24,15 @@ class TwinRepRAG:
             chunk_overlap=100,
             separators=["\n===", "\n\n", "\n", ". ", " ", ""],
         )
+
+        # Pull persisted FAISS index & manuals from S3 if booting on a fresh EC2 instance
+        if self.s3.enabled and not (INDEX_DIR / "index.faiss").exists():
+            self.s3.download_prefix("faiss_index/", INDEX_DIR)
+            self.s3.download_prefix("manuals/", MANUALS_DIR)
+
         self.vectorstore = self._load_or_create_index()
         self.manifest = self._load_or_bootstrap_manifest()
 
-        # Auto-ingest manuals folder on startup if no real documents are indexed yet
         if self.get_real_chunk_count() == 0:
             self.ingest_existing_manuals()
 
@@ -50,7 +57,6 @@ class TwinRepRAG:
             except Exception:
                 pass
 
-        # Bootstrap manifest from any sources already present in an existing FAISS index
         existing_sources: dict[str, int] = {}
         existing_tickets: list[int] = []
         for doc in self.vectorstore.docstore._dict.values():
@@ -103,7 +109,6 @@ class TwinRepRAG:
         file_hash = self._compute_file_hash(file_path)
         prev = self.manifest["files"].get(file_path.name)
 
-        # Deduplication check: skip if identical file content was already indexed
         if prev and prev.get("sha256") == file_hash:
             return {
                 "status": "skipped_duplicate",
@@ -115,7 +120,6 @@ class TwinRepRAG:
         if not raw_text:
             return {"status": "empty", "chunks_added": 0, "message": f'"{file_path.name}" contained no readable text.'}
 
-        # If updating an existing filename with new content, remove stale chunks first
         if prev:
             self._delete_by_source(file_path.name)
 
@@ -126,6 +130,10 @@ class TwinRepRAG:
 
         self.manifest["files"][file_path.name] = {"sha256": file_hash, "chunks": len(chunks)}
         self._save_manifest()
+
+        # Sync manual and updated FAISS snapshot to S3
+        self.s3.upload_file(file_path, f"manuals/{file_path.name}")
+        self.s3.upload_directory(INDEX_DIR, "faiss_index/")
 
         action = "Updated" if prev else "Indexed"
         return {
@@ -147,7 +155,6 @@ class TwinRepRAG:
         return {"total_chunks_added": added, "files_skipped": skipped}
 
     def retrieve(self, query: str, k: int = 4) -> list[dict]:
-        # Fetch extra candidates so filtering system_init and below-threshold docs still yields up to k matches
         results = self.vectorstore.similarity_search_with_score(query, k=k + 2)
         filtered = []
         for doc, l2_dist in results:
@@ -169,7 +176,6 @@ class TwinRepRAG:
         return filtered
 
     def add_verified_resolution(self, ticket_id: int, question: str, verified_answer: str) -> bool:
-        """Feature 3 (Idempotent): Hot-updates FAISS once per ticket_id."""
         if ticket_id in self.manifest["verified_tickets"]:
             return False
 
@@ -185,6 +191,9 @@ class TwinRepRAG:
 
         self.manifest["verified_tickets"].append(ticket_id)
         self._save_manifest()
+
+        # Persist updated FAISS index to S3
+        self.s3.upload_directory(INDEX_DIR, "faiss_index/")
         return True
 
     def get_real_chunk_count(self) -> int:
@@ -200,4 +209,5 @@ class TwinRepRAG:
             "indexed_files": list(self.manifest["files"].keys()),
             "verified_tickets_count": len(self.manifest["verified_tickets"]),
             "max_l2_distance": self.max_l2_distance,
+            "s3_bucket": self.s3.bucket if self.s3.enabled else "local_only",
         }
