@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TwinRep AI — Persona-Adaptive After-Sales Agent</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo-dot"></span>
+      <h1>TwinRep AI</h1>
+      <span class="badge">Domain-Specific Service Clone</span>
+    </div>
+
+    <div class="health-bar" id="healthBar">
+      <span class="health-pill" id="healthDb">MySQL: checking...</span>
+      <span class="health-pill" id="healthFaiss">FAISS: checking...</span>
+      <span class="health-pill" id="healthLlm">LLM: checking...</span>
+    </div>
+
+    <nav class="tabs">
+      <button class="tab-btn active" onclick="switchTab('chat', this)">1. Customer Support Portal</button>
+      <button class="tab-btn" onclick="switchTab('kb', this)">2. Knowledge Base (RAG)</button>
+      <button class="tab-btn" onclick="switchTab('manager', this)">3. Manager Review Loop</button>
+    </nav>
+
+    <div class="header-controls">
+      <div class="persona-toggle">
+        <label for="personaSelect">Persona:</label>
+        <select id="personaSelect" onchange="updatePersonaScale(this.value)" disabled title="Login as Manager to switch persona">
+          <option value="1.0" selected>Cloned Manager (LoRA = 1.0)</option>
+          <option value="0.0">Generic Base LLM (LoRA = 0.0)</option>
+        </select>
+      </div>
+      <div id="authHeaderStatus" class="auth-chip">Customer View</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- TAB 1: PUBLIC CUSTOMER PORTAL -->
+    <section id="tab-chat" class="tab-panel active">
+      <div class="ticket-tracker-bar">
+        <span><strong>Track Ticket Status:</strong></span>
+        <input type="number" id="lookupTicketId" min="1" placeholder="Ticket #" />
+        <button type="button" class="secondary" onclick="checkCustomerTicket()">Check Manager Verification</button>
+        <span id="lookupStatusText" class="lookup-hint">Submit an inquiry below or enter a Ticket # to view verified manager replies.</span>
+      </div>
+
+      <div id="verifiedTicketBanner" class="verified-banner" style="display:none;"></div>
+
+      <div class="chat-box" id="chatMessages">
+        <div class="msg bot">
+          <strong>TwinRep Service Agent:</strong> Welcome to After-Sales Technical Support. Describe your equipment model, error code, or maintenance issue below.
+        </div>
+      </div>
+
+      <form class="chat-input-bar" onsubmit="sendQuestion(event)">
+        <input type="text" id="customerName" value="Acme Manufacturing" placeholder="Company / Client Name" />
+        <input type="text" id="questionInput" placeholder="e.g., Our KX-400 CNC machine just threw an E-04 spindle encoder error..." required />
+        <button type="submit" id="sendBtn">Send Inquiry</button>
+      </form>
+    </section>
+
+    <!-- MANAGER LOGIN GATE (Shown in Tab 2 & Tab 3 if not authenticated) -->
+    <section id="managerLoginGate" class="tab-panel">
+      <div class="card login-card">
+        <h2>Manager Authentication Required</h2>
+        <p class="subtitle">Knowledge Base management and the Human-in-the-Loop review console are restricted to authorized After-Sales Managers.</p>
+        <form onsubmit="handleManagerLogin(event)" class="login-form">
+          <label>Username</label>
+          <input type="text" id="loginUsername" value="admin" required />
+          <label>Password</label>
+          <input type="password" id="loginPassword" value="twinrep-admin" required />
+          <button type="submit">Unlock Manager Console</button>
+          <p id="loginError" class="error-msg"></p>
+        </form>
+      </div>
+    </section>
+
+    <!-- TAB 2: KNOWLEDGE BASE UPLOAD (PROTECTED) -->
+    <section id="tab-kb" class="tab-panel">
+      <div class="card">
+        <div class="manager-header">
+          <h2>Upload Technical Manuals & Historical QA Logs</h2>
+          <span id="indexedFilesCount" class="badge">0 files indexed</span>
+        </div>
+        <p>Uploaded PDF, TXT, or Markdown files are deduplicated via SHA-256 hash, chunked (500 chars), and embedded into the persistent FAISS vector store.</p>
+        <div class="upload-row">
+          <input type="file" id="manualFile" accept=".pdf,.txt,.md" />
+          <button onclick="uploadManual()">Upload & Index Document</button>
+          <button class="secondary" onclick="syncFolder()">Sync /data/manuals Folder</button>
+        </div>
+        <p id="uploadStatus" class="status-msg"></p>
+        <div id="indexedFilesList" class="files-list"></div>
+      </div>
+    </section>
+
+    <!-- TAB 3: MANAGER HUMAN-IN-THE-LOOP CONSOLE (PROTECTED) -->
+    <section id="tab-manager" class="tab-panel">
+      <div class="manager-header">
+        <h2>Human-in-the-Loop Continuous Learning Console</h2>
+        <button class="secondary" onclick="loadTickets()">Refresh Queue</button>
+      </div>
+      <p class="subtitle">Approving or editing a drafted reply locks the ticket and immediately embeds the verified resolution into the live RAG vector store.</p>
+      <div id="ticketList" class="ticket-grid"></div>
+    </section>
+  </main>
+
+  <script src="app.js?v=2"></script>
+</body>
+</html>
