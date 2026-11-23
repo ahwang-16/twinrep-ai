@@ -1,6 +1,6 @@
 # TwinRep AI — Persona-Adaptive After-Sales Support Agent
 
-EE 542 final project (Fall 2026). Author: Alex Hwang.
+EE 542 final project (Fall 2026).
 
 TwinRep AI is a local-first, full-stack B2B after-sales support platform built for specialized hardware and heavy machinery manufacturers. Instead of relying on rigid decision trees or generic LLMs that produce robotic answers and hallucinate technical specifications, the system acts as a digital twin of an experienced after-sales service manager.
 
